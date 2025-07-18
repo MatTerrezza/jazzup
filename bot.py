@@ -100,48 +100,43 @@ def show_my_reports(message):
         )
         return
     
-    response = "📋 Ваши отчеты:\n\n"
-    for report in reports[:5]:  # Последние 5 отчетов
-        try:
-            report_id, date, text, edited_at = report
-            date_str = date.strftime("%d.%m.%Y") if isinstance(date, datetime) else date
-            response += f"📅 {date_str}\n{text}\n"
-            if edited_at:
-                response += f"✏️ (Отредактировано)\n"
-            response += "\n"
-        except ValueError:
-            # Если структура отчета не соответствует ожидаемой
-            continue
-    
     bot.send_message(
         message.chat.id,
-        response,
-        reply_markup=buttons.get_admin_keyboard() if is_admin(message.from_user.id) else buttons.get_main_keyboard()
+        "Выберите отчет для управления:",
+        reply_markup=buttons.generate_my_reports_inline(message.from_user.id)
     )
-
 def process_edit_report(message, report_id):
-    """Обработчик редактирования отчета (удаляет старую версию и сохраняет новую)"""
+    """Обработчик редактирования отчета с автоматическим сохранением старой версии"""
     try:
-        # Удаляем старый отчет
-        database.delete_report(report_id)
+        # Обновляем отчет в базе данных (старая версия автоматически сохраняется)
+        success = database.update_report(
+            report_id=report_id,
+            new_text=message.text,
+            editor_id=message.from_user.id
+        )
         
-        # Добавляем новый (обновленный) отчет
-        new_report_id = database.add_report(message.from_user.id, message.text)
+        keyboard = buttons.get_admin_keyboard() if is_admin(message.from_user.id) else buttons.get_main_keyboard()
         
-        if new_report_id:
+        if success:
             bot.send_message(
                 message.chat.id,
-                "✅ Отчет успешно обновлен (старая версия удалена)!",
-                reply_markup=buttons.get_admin_keyboard() if is_admin(message.from_user.id) else buttons.get_main_keyboard()
+                "✅ Отчет успешно обновлен! Старая версия сохранена в архиве.",
+                reply_markup=keyboard
             )
         else:
             bot.send_message(
                 message.chat.id,
                 "❌ Не удалось обновить отчет",
-                reply_markup=buttons.get_admin_keyboard() if is_admin(message.from_user.id) else buttons.get_main_keyboard()
+                reply_markup=keyboard
             )
     except Exception as e:
         print(f"Ошибка при редактировании отчета: {e}")
+        keyboard = buttons.get_admin_keyboard() if is_admin(message.from_user.id) else buttons.get_main_keyboard()
+        bot.send_message(
+            message.chat.id,
+            "❌ Произошла ошибка при обновлении отчета",
+            reply_markup=keyboard
+        )
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("edit_"))
 def handle_edit_report(call):
@@ -243,10 +238,138 @@ def admin_view_reports(message):
         reply_markup=buttons.generate_users_inline()
     )
 
-@bot.callback_query_handler(func=lambda call: True)     # Инлайн кнопки с отчетами
+@bot.callback_query_handler(func=lambda call: True)
 def handle_inline_buttons(call):
     try:
-        if call.data.startswith("user_"):
+        if call.data.startswith("myreport_"):
+            report_id = call.data.split("_")[1]
+            report = database.get_report_by_id(report_id)
+            
+            if not report:
+                bot.answer_callback_query(call.id, "❌ Отчет не найден")
+                return
+                
+            # Распаковываем данные отчета
+            r_id, user_id, text, date, edited_by, edited_at = report
+            date_str = date.strftime("%d.%m.%Y") if hasattr(date, 'strftime') else date
+            
+            # Формируем текст сообщения
+            message_text = f"📅 <b>Отчет от {date_str}</b>"
+            if edited_at:
+                edited_time = edited_at.strftime("%d.%m.%Y %H:%M") if hasattr(edited_at, 'strftime') else edited_at
+                message_text += f"\n✏️ <i>Редактировано: {edited_time}</i>"
+            message_text += f"\n\n{text}"
+            
+            # Показываем отчет с кнопками действий
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=message_text,
+                parse_mode="HTML",
+                reply_markup=buttons.generate_my_report_actions_inline(report_id)
+            )
+        
+        # Обработка кнопки "Назад" в разделе "Мои отчеты"
+        elif call.data == "back_to_myreports":
+            reports = database.get_user_reports(call.from_user.id)
+            if not reports:
+                bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text="📭 У вас пока нет сохраненных отчетов."
+                )
+                return
+                
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text="📋 Выберите отчет для управления:",
+                reply_markup=buttons.generate_my_reports_inline(call.from_user.id)
+            )
+        
+        # Обработка кнопки редактирования отчета
+        elif call.data.startswith("edit_"):
+            report_id = call.data.split("_")[1]
+            
+            if not database.can_edit_report(call.from_user.id, report_id):
+                bot.answer_callback_query(call.id, "❌ Вы не можете редактировать этот отчет")
+                return
+                
+            # Получаем текущий текст отчета
+            report = database.get_report_by_id(report_id)
+            if not report:
+                bot.answer_callback_query(call.id, "❌ Отчет не найден")
+                return
+                
+            old_text = report[2]  # report_text
+            
+            # Отправляем запрос на новый текст
+            msg = bot.send_message(
+                call.message.chat.id,
+                "✏️ Введите новый текст отчета:",
+                reply_markup=ForceReply(selective=True)
+            )
+            
+            # Показываем старый текст для справки
+            bot.send_message(
+                call.message.chat.id,
+                f"📄 Текущий текст:\n\n{old_text}",
+                reply_to_message_id=msg.message_id
+            )
+            
+            # Регистрируем обработчик следующего сообщения
+            bot.register_next_step_handler(msg, process_edit_report, report_id)
+        
+        # Обработка кнопки удаления отчета
+        elif call.data.startswith("delete_"):
+            report_id = call.data.split("_")[1]
+            
+            if not database.can_edit_report(call.from_user.id, report_id):
+                bot.answer_callback_query(call.id, "❌ Вы не можете удалить этот отчет")
+                return
+                
+            # Удаляем отчет
+            if database.delete_report(report_id):
+                bot.answer_callback_query(call.id, "✅ Отчет удален")
+                
+                # Возвращаемся к списку отчетов
+                reports = database.get_user_reports(call.from_user.id)
+                if reports:
+                    bot.edit_message_text(
+                        chat_id=call.message.chat.id,
+                        message_id=call.message.message_id,
+                        text="📋 Выберите отчет для управления:",
+                        reply_markup=buttons.generate_my_reports_inline(call.from_user.id)
+                    )
+                else:
+                    bot.edit_message_text(
+                        chat_id=call.message.chat.id,
+                        message_id=call.message.message_id,
+                        text="📭 У вас больше нет сохраненных отчетов."
+                    )
+            else:
+                bot.answer_callback_query(call.id, "❌ Ошибка при удалении отчета")
+        
+        # Обработка кнопки "Назад" в админском разделе
+        elif call.data == "back_to_users":
+            users = database.get_users_with_reports()
+            if not users:
+                bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text="Нет пользователей с отчетами."
+                )
+                return
+                
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text="Выберите пользователя для просмотра отчетов:",
+                reply_markup=buttons.generate_users_inline()
+            )
+        
+        # Обработка выбора пользователя (для админов)
+        elif call.data.startswith("user_"):
             user_id = int(call.data.split("_")[1])
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
@@ -255,6 +378,7 @@ def handle_inline_buttons(call):
                 reply_markup=buttons.generate_user_dates_inline(user_id)
             )
         
+        # Обработка выбора отчета (для админов)
         elif call.data.startswith("report_"):
             _, user_id, report_date = call.data.split("_", 2)
             reports = database.get_user_reports(int(user_id))
@@ -301,49 +425,36 @@ def handle_inline_buttons(call):
             else:
                 bot.answer_callback_query(call.id, "Отчет не найден")
         
-        elif call.data.startswith("edit_"):
-            report_id = call.data.split("_")[1]
-            
-            if not database.can_edit_report(call.from_user.id, report_id):
-                bot.answer_callback_query(call.id, "❌ Вы не можете редактировать этот отчет")
-                return
-                
-            msg = bot.send_message(
-                call.message.chat.id,
-                "Введите новый текст отчета:",
-                reply_markup=ForceReply()
-            )
-            bot.register_next_step_handler(msg, process_edit_report, report_id)
-            
-        elif call.data.startswith("delete_"):
-            report_id = call.data.split("_")[1]
-            
-            if not database.can_edit_report(call.from_user.id, report_id):
-                bot.answer_callback_query(call.id, "❌ Вы не можете удалить этот отчет")
-                return
-                
-            if database.delete_report(report_id):
-                bot.answer_callback_query(call.id, "✅ Отчет удален")
-                bot.edit_message_text(
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                    text="Отчет был удален",
-                    reply_markup=buttons.generate_users_inline()
-                )
-            else:
-                bot.answer_callback_query(call.id, "❌ Ошибка при удалении отчета")
-        
-        elif call.data == "back_to_users":
-            bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                text="Выберите пользователя для просмотра отчетов:",
-                reply_markup=buttons.generate_users_inline()
-            )
-        
+        # Всегда отвечаем на callback_query
         bot.answer_callback_query(call.id)
         
     except Exception as e:
         print(f"Ошибка в обработчике кнопок: {e}")
-        bot.answer_callback_query(call.id, "Произошла ошибка")
+        bot.answer_callback_query(call.id, "❌ Произошла ошибка")
 
+@bot.message_handler(func=lambda m: m.text == "Мои задачи")
+def show_my_tasks(message):
+    tasks = database.get_user_tasks(message.from_user.id)
+    if not tasks:
+        bot.send_message(
+            message.chat.id,
+            "У вас пока нет сохраненных задач.",
+            reply_markup=buttons.get_main_keyboard()
+        )
+        return
+    
+    response = "📋 Ваши задачи:\n\n"
+    for task in tasks[:10]:  # Последние 10 задач
+        try:
+            task_id, text, date, completed = task
+            date_str = date.strftime("%d.%m.%Y") if isinstance(date, datetime) else date
+            status = "✅" if completed else "🟡"
+            response += f"{status} {date_str}\n{text}\n\n"
+        except ValueError:
+            continue
+    
+    bot.send_message(
+        message.chat.id,
+        response,
+        reply_markup=buttons.get_main_keyboard()
+    )
