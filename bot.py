@@ -8,6 +8,7 @@ import time
 import pytz
 from datetime import datetime
 from dotenv import load_dotenv
+from telebot import types
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply, ReplyKeyboardMarkup, KeyboardButton
 
 load_dotenv()
@@ -238,6 +239,7 @@ def admin_view_reports(message):
         reply_markup=buttons.generate_users_inline()
     )
 
+
 @bot.callback_query_handler(func=lambda call: True)
 def handle_inline_buttons(call):
     try:
@@ -431,7 +433,57 @@ def handle_inline_buttons(call):
     except Exception as e:
         print(f"Ошибка в обработчике кнопок: {e}")
         bot.answer_callback_query(call.id, "❌ Произошла ошибка")
-
+#------------------------------------
+@bot.callback_query_handler(func=lambda call: call.data.startswith("report_"))
+def handle_report_callback(call):
+    try:
+        # Разбираем callback_data: report_<user_id>_<date>
+        _, user_id, report_date = call.data.split("_", 2)
+        user_id = int(user_id)
+        
+        # Получаем отчет
+        report = database.get_report_by_date(user_id, report_date)
+        if not report:
+            bot.answer_callback_query(call.id, "Отчет не найден")
+            return
+        
+        # Получаем задачи на эту дату
+        tasks = database.get_user_tasks_by_date(user_id, report_date.split()[0])
+        
+        # Формируем сообщение
+        user = database.get_user(user_id)
+        user_name = user[1] if user else f"Пользователь {user_id}"
+        
+        try:
+            formatted_date = datetime.strptime(report_date, "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y")
+        except:
+            formatted_date = report_date
+        
+        msg = f"<b>Отчет {user_name}</b>\n"
+        msg += f"<i>Дата: {formatted_date}</i>\n\n"
+        msg += f"{report['text']}\n\n"
+        
+        if tasks:
+            msg += "📌 <b>Задачи:</b>\n"
+            for task in tasks:
+                status = "✅" if task[3] else "⏳"  # task[3] - is_completed
+                msg += f"{status} {task[1]}\n"  # task[1] - task_text
+        
+        # Обновляем сообщение
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=msg,
+            parse_mode="HTML",
+            reply_markup=buttons.generate_report_actions_inline(
+                user_id, report['id'], report_date
+            )
+        )
+        
+    except Exception as e:
+        print(f"Ошибка в handle_report_callback: {e}")
+        bot.answer_callback_query(call.id, "Ошибка загрузки отчета")
+#--------------------------------------------
 @bot.message_handler(func=lambda m: m.text == "Мои задачи")
 def show_my_tasks(message):
     tasks = database.get_user_tasks(message.from_user.id)
@@ -458,3 +510,31 @@ def show_my_tasks(message):
         response,
         reply_markup=buttons.get_main_keyboard()
     )
+
+
+@bot.message_handler(func=lambda m: m.text == "Добавить задачу")
+def handle_add_task(message):
+    # Запрашиваем текст задачи
+    msg = bot.send_message(
+        message.chat.id,
+        "📝 Введите текст новой задачи:",
+        reply_markup=types.ForceReply()
+    )
+    bot.register_next_step_handler(msg, process_task_input)
+
+def process_task_input(message):
+    try:
+        # Добавляем задачу в базу данных
+        task_id = database.add_task(message.from_user.id, message.text)
+        bot.send_message(
+            message.chat.id,
+            "✅ Задача успешно добавлена!",
+            reply_markup=buttons.get_main_keyboard()
+        )
+    except Exception as e:
+        print(f"Ошибка при добавлении задачи: {e}")
+        bot.send_message(
+            message.chat.id,
+            "❌ Не удалось добавить задачу",
+            reply_markup=buttons.get_main_keyboard()
+        )

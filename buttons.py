@@ -15,7 +15,7 @@ def get_main_keyboard():
     
     btn_report = types.KeyboardButton("Заполнить отчет")
     btn_my_reports = types.KeyboardButton("Мои отчеты")
-    btn_tasks = types.KeyboardButton("План задач")
+    btn_tasks = types.KeyboardButton("Добавить задачу")
     btn_my_tasks = types.KeyboardButton("Мои задачи")  # Новая кнопка
     btn_rule = types.KeyboardButton("Правила")
     

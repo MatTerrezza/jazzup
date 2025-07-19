@@ -88,7 +88,51 @@ def get_user_tasks(user_id):
             ORDER BY task_date DESC
         ''', (user_id,))
         return cursor.fetchall()
+#-------------------------------------------
+def get_user_tasks_by_date(user_id, date):
+    """Получает задачи пользователя за конкретную дату"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT task_text, is_completed 
+            FROM tasks 
+            WHERE user_id = ? AND date(task_date) = date(?)
+        ''', (user_id, date))
+        return cursor.fetchall()
 
+def get_report_by_id_and_date(user_id, report_date):
+    """Получает отчет по ID пользователя и дате"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, report_text 
+            FROM reports 
+            WHERE user_id = ? AND strftime('%Y-%m-%d', report_date) = ?
+            LIMIT 1
+        ''', (user_id, report_date.split()[0]))
+        row = cursor.fetchone()
+        return {'id': row[0], 'text': row[1]} if row else None
+        
+def get_report_by_date(user_id, report_date):
+    """Получает отчет по ID пользователя и дате"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, report_text, edited_at 
+            FROM reports 
+            WHERE user_id = ? AND strftime('%Y-%m-%d', report_date) = ?
+            LIMIT 1
+        ''', (user_id, report_date.split()[0]))
+        row = cursor.fetchone()
+        if row:
+            return {
+                'id': row[0],
+                'text': row[1],
+                'edited_at': row[2]
+            }
+        return None
+
+#-------------------------------------------------------
 def migrate_db():
     """Добавляет недостающие таблицы и колонки в базу данных"""
     with get_db_connection() as conn:
