@@ -271,7 +271,6 @@ def handle_inline_buttons(call):
                 reply_markup=buttons.generate_my_report_actions_inline(report_id)
             )
         
-        # Обработка кнопки "Назад" в разделе "Мои отчеты"
         elif call.data == "back_to_myreports":
             reports = database.get_user_reports(call.from_user.id)
             if not reports:
@@ -289,7 +288,6 @@ def handle_inline_buttons(call):
                 reply_markup=buttons.generate_my_reports_inline(call.from_user.id)
             )
         
-        # Обработка кнопки редактирования отчета
         elif call.data.startswith("edit_"):
             report_id = call.data.split("_")[1]
             
@@ -297,32 +295,27 @@ def handle_inline_buttons(call):
                 bot.answer_callback_query(call.id, "❌ Вы не можете редактировать этот отчет")
                 return
                 
-            # Получаем текущий текст отчета
             report = database.get_report_by_id(report_id)
             if not report:
                 bot.answer_callback_query(call.id, "❌ Отчет не найден")
                 return
                 
-            old_text = report[2]  # report_text
+            old_text = report[2]
             
-            # Отправляем запрос на новый текст
             msg = bot.send_message(
                 call.message.chat.id,
                 "✏️ Введите новый текст отчета:",
                 reply_markup=ForceReply(selective=True)
             )
             
-            # Показываем старый текст для справки
             bot.send_message(
                 call.message.chat.id,
                 f"📄 Текущий текст:\n\n{old_text}",
                 reply_to_message_id=msg.message_id
             )
             
-            # Регистрируем обработчик следующего сообщения
             bot.register_next_step_handler(msg, process_edit_report, report_id)
         
-        # Обработка кнопки удаления отчета
         elif call.data.startswith("delete_"):
             report_id = call.data.split("_")[1]
             
@@ -330,11 +323,9 @@ def handle_inline_buttons(call):
                 bot.answer_callback_query(call.id, "❌ Вы не можете удалить этот отчет")
                 return
                 
-            # Удаляем отчет
             if database.delete_report(report_id):
                 bot.answer_callback_query(call.id, "✅ Отчет удален")
                 
-                # Возвращаемся к списку отчетов
                 reports = database.get_user_reports(call.from_user.id)
                 if reports:
                     bot.edit_message_text(
@@ -352,7 +343,6 @@ def handle_inline_buttons(call):
             else:
                 bot.answer_callback_query(call.id, "❌ Ошибка при удалении отчета")
         
-        # Обработка кнопки "Назад" в админском разделе
         elif call.data == "back_to_users":
             users = database.get_users_with_reports()
             if not users:
@@ -370,7 +360,6 @@ def handle_inline_buttons(call):
                 reply_markup=buttons.generate_users_inline()
             )
         
-        # Обработка выбора пользователя (для админов)
         elif call.data.startswith("user_"):
             user_id = int(call.data.split("_")[1])
             bot.edit_message_text(
@@ -380,7 +369,6 @@ def handle_inline_buttons(call):
                 reply_markup=buttons.generate_user_dates_inline(user_id)
             )
         
-        # Обработка выбора отчета (для админов)
         elif call.data.startswith("report_"):
             _, user_id, report_date = call.data.split("_", 2)
             reports = database.get_user_reports(int(user_id))
@@ -421,18 +409,137 @@ def handle_inline_buttons(call):
                          f"{edited_info}",
                     parse_mode="HTML",
                     reply_markup=buttons.generate_report_actions_inline(
-                        int(user_id), report_info['id'], report_date
-                    )
+                        int(user_id), report_info['id'], report_date)
                 )
             else:
                 bot.answer_callback_query(call.id, "Отчет не найден")
-        
-        # Всегда отвечаем на callback_query
+
+        # Обработка задач
+        elif call.data == "back_to_mytasks":
+            tasks = database.get_user_tasks(call.from_user.id)
+            if not tasks:
+                bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text="У вас пока нет задач."
+                )
+            else:
+                bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text="Выберите задачу:",
+                    reply_markup=buttons.generate_my_tasks_inline(call.from_user.id)
+                )
+
+        elif call.data.startswith("edittask_"):
+            task_id = call.data.split("_")[1]
+            task = database.get_task_by_id(task_id)
+            
+            if not task:
+                bot.answer_callback_query(call.id, "❌ Задача не найдена")
+                return
+                
+            msg = bot.send_message(
+                call.message.chat.id,
+                "✏️ Введите новый текст задачи:",
+                reply_markup=ForceReply()
+            )
+            bot.register_next_step_handler(msg, process_edit_task, task_id)
+            return
+            
+        elif call.data.startswith("toggletask_"):
+            task_id = call.data.split("_")[1]
+            if database.toggle_task_status(task_id):
+                task = database.get_task_by_id(task_id)
+                status = "✅ Выполнена" if task[4] else "⏳ В процессе"
+                text = f"📌 *Задача*:\n{task[2]}\n\n{status}\n🗓 {task[3]}"
+                
+                bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text=text,
+                    parse_mode="Markdown",
+                    reply_markup=buttons.generate_task_actions_inline(task_id)
+                )
+                bot.answer_callback_query(call.id, "Статус обновлен")
+            else:
+                bot.answer_callback_query(call.id, "❌ Ошибка обновления статуса")
+            return
+            
+        elif call.data.startswith("deletetask_"):
+            task_id = call.data.split("_")[1]
+            if database.delete_task(task_id):
+                bot.answer_callback_query(call.id, "✅ Задача удалена")
+                tasks = database.get_user_tasks(call.from_user.id)
+                
+                if tasks:
+                    bot.edit_message_text(
+                        chat_id=call.message.chat.id,
+                        message_id=call.message.message_id,
+                        text="Выберите задачу:",
+                        reply_markup=buttons.generate_my_tasks_inline(call.from_user.id)
+                    )
+                else:
+                    bot.edit_message_text(
+                        chat_id=call.message.chat.id,
+                        message_id=call.message.message_id,
+                        text="У вас больше нет задач."
+                    )
+            else:
+                bot.answer_callback_query(call.id, "❌ Ошибка удаления задачи")
+            return
+            
+        elif call.data.startswith("mytask_"):
+            task_id = call.data.split("_")[1]
+            task = database.get_task_by_id(task_id)
+            
+            if not task:
+                bot.answer_callback_query(call.id, "❌ Задача не найдена")
+                return
+
+            task_id, user_id, text, date, completed = task
+            date_str = date.strftime("%d.%m.%Y") if hasattr(date, 'strftime') else str(date)
+            status = "✅ Выполнена" if completed else "⏳ В процессе"
+
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=f"📌 *Задача:*\n{text}\n\n{status}\n🗓 {date_str}",
+                parse_mode="Markdown",
+                reply_markup=buttons.generate_task_actions_inline(task_id)
+            )
+            return
+
+        # Всегда отвечаем на callback_query, если не было return раньше
         bot.answer_callback_query(call.id)
         
     except Exception as e:
         print(f"Ошибка в обработчике кнопок: {e}")
         bot.answer_callback_query(call.id, "❌ Произошла ошибка")
+
+def process_edit_task(message, task_id):
+    try:
+        # Обновляем задачу в базе данных
+        with database.get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE tasks SET task_text = ? WHERE id = ?",
+                (message.text, task_id)
+            )
+            conn.commit()
+            
+        bot.send_message(
+            message.chat.id,
+            "✅ Задача обновлена!",
+            reply_markup=buttons.get_main_keyboard()
+        )
+    except Exception as e:
+        print(f"Ошибка при редактировании задачи: {e}")
+        bot.send_message(
+            message.chat.id,
+            "❌ Ошибка при обновлении задачи",
+            reply_markup=buttons.get_main_keyboard()
+        )
 #------------------------------------
 @bot.callback_query_handler(func=lambda call: call.data.startswith("report_"))
 def handle_report_callback(call):
@@ -490,41 +597,28 @@ def show_my_tasks(message):
     if not tasks:
         bot.send_message(
             message.chat.id,
-            "У вас пока нет сохраненных задач.",
+            "У вас пока нет задач.",
             reply_markup=buttons.get_main_keyboard()
         )
         return
     
-    response = "📋 Ваши задачи:\n\n"
-    for task in tasks[:10]:  # Последние 10 задач
-        try:
-            task_id, text, date, completed = task
-            date_str = date.strftime("%d.%m.%Y") if isinstance(date, datetime) else date
-            status = "✅" if completed else "🟡"
-            response += f"{status} {date_str}\n{text}\n\n"
-        except ValueError:
-            continue
-    
     bot.send_message(
         message.chat.id,
-        response,
-        reply_markup=buttons.get_main_keyboard()
+        "Выберите задачу:",
+        reply_markup=buttons.generate_my_tasks_inline(message.from_user.id)
     )
-
 
 @bot.message_handler(func=lambda m: m.text == "Добавить задачу")
 def handle_add_task(message):
-    # Запрашиваем текст задачи
     msg = bot.send_message(
         message.chat.id,
         "📝 Введите текст новой задачи:",
-        reply_markup=types.ForceReply()
+        reply_markup=ForceReply()
     )
-    bot.register_next_step_handler(msg, process_task_input)
+    bot.register_next_step_handler(msg, process_add_task)
 
-def process_task_input(message):
+def process_add_task(message):
     try:
-        # Добавляем задачу в базу данных
         task_id = database.add_task(message.from_user.id, message.text)
         bot.send_message(
             message.chat.id,
@@ -532,7 +626,7 @@ def process_task_input(message):
             reply_markup=buttons.get_main_keyboard()
         )
     except Exception as e:
-        print(f"Ошибка при добавлении задачи: {e}")
+        print(f"Ошибка добавления задачи: {e}")
         bot.send_message(
             message.chat.id,
             "❌ Не удалось добавить задачу",

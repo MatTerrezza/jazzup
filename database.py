@@ -88,6 +88,18 @@ def get_user_tasks(user_id):
             ORDER BY task_date DESC
         ''', (user_id,))
         return cursor.fetchall()
+        
+def delete_task(task_id):
+    """Удаляет задачу по ID"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"Ошибка удаления задачи: {e}")
+            return False
 #-------------------------------------------
 def get_user_tasks_by_date(user_id, date):
     """Получает задачи пользователя за конкретную дату"""
@@ -333,6 +345,25 @@ def delete_report(report_id):
         except Exception as e:
             print(f"Ошибка удаления отчета: {e}")
             return False
+
+def get_task_by_id(task_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, user_id, task_text, task_date, is_completed 
+            FROM tasks WHERE id = ?
+        ''', (task_id,))
+        return cursor.fetchone()
+
+def toggle_task_status(task_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE tasks SET is_completed = NOT is_completed 
+            WHERE id = ?
+        ''', (task_id,))
+        conn.commit()
+        return cursor.rowcount > 0
 
 # Инициализация базы данных
 init_db()

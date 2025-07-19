@@ -1,8 +1,9 @@
-import telebot.types as types
-import json
+from telebot import types
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
 import database
 from datetime import datetime
+
 
 def get_user_keyboard(user_id=None):     #Возвращает клавиатуру в зависимости от роли пользователя
 
@@ -189,3 +190,43 @@ def process_edit_report(message, report_id):
             "❌ Произошла ошибка при обновлении отчета",
             reply_markup=buttons.get_main_keyboard()
         )
+
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+def generate_my_tasks_inline(user_id):
+    """Генерирует инлайн-кнопки с задачами пользователя"""
+    markup = InlineKeyboardMarkup()
+    tasks = database.get_user_tasks(user_id)
+    
+    if not tasks:
+        return markup
+    
+    for task in tasks[:10]:  # Показываем последние 10 задач
+        try:
+            task_id, text, date, completed = task  # Теперь 4 значения вместо 5
+            date_str = date.strftime("%d.%m.%Y") if hasattr(date, 'strftime') else str(date)
+            btn_text = f"{'✅' if completed else '🟡'} {date_str}"
+            
+            markup.add(
+                InlineKeyboardButton(
+                    text=btn_text,
+                    callback_data=f"mytask_{task_id}"
+                )
+            )
+        except Exception as e:
+            print(f"Ошибка обработки задачи: {e}")
+            continue
+    
+    return markup
+
+def generate_task_actions_inline(task_id):
+    markup = InlineKeyboardMarkup()
+    markup.row(
+        InlineKeyboardButton("✏️ Редактировать", callback_data=f"edittask_{task_id}"),
+        InlineKeyboardButton("✅ Переключить статус", callback_data=f"toggletask_{task_id}")
+    )
+    markup.row(
+        InlineKeyboardButton("🗑 Удалить", callback_data=f"deletetask_{task_id}"),
+        InlineKeyboardButton("◀️ Назад", callback_data="back_to_mytasks")
+    )
+    return markup
