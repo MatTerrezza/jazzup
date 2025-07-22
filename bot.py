@@ -6,7 +6,7 @@ import threading
 import schedule
 import time
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telebot import types
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply, ReplyKeyboardMarkup, KeyboardButton
@@ -554,8 +554,19 @@ def handle_report_callback(call):
             bot.answer_callback_query(call.id, "Отчет не найден")
             return
         
-        # Получаем задачи на эту дату
-        tasks = database.get_user_tasks_by_date(user_id, report_date.split()[0])
+        # Получаем дату отчета и предыдущий день
+        try:
+            report_datetime = datetime.strptime(report_date, "%Y-%m-%d %H:%M:%S")
+            previous_day = report_datetime - timedelta(days=1)
+            previous_day_str = previous_day.strftime("%Y-%m-%d")
+        except Exception as e:
+            print(f"Ошибка обработки даты: {e}")
+            previous_day_str = None
+        
+        # Получаем задачи на предыдущий день
+        previous_day_tasks = []
+        if previous_day_str:
+            previous_day_tasks = database.get_user_tasks_by_date(user_id, previous_day_str)
         
         # Формируем сообщение
         user = database.get_user(user_id)
@@ -570,9 +581,10 @@ def handle_report_callback(call):
         msg += f"<i>Дата: {formatted_date}</i>\n\n"
         msg += f"{report['text']}\n\n"
         
-        if tasks:
-            msg += "📌 <b>Задачи:</b>\n"
-            for task in tasks:
+        # Добавляем задачи предыдущего дня, если они есть
+        if previous_day_tasks:
+            msg += "📌 <b>Задачи за предыдущий день:</b>\n"
+            for task in previous_day_tasks:
                 status = "✅" if task[3] else "⏳"  # task[3] - is_completed
                 msg += f"{status} {task[1]}\n"  # task[1] - task_text
         

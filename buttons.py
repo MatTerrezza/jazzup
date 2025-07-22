@@ -86,23 +86,29 @@ def generate_my_report_actions_inline(report_id):
     return markup    
     
 def generate_users_inline():
-    """Генерирует инлайн-кнопки с пользователями"""
+    """Генерирует инлайн-кнопки с пользователями и статусом отчетов"""
     markup = types.InlineKeyboardMarkup()
     users = database.get_users_with_reports()
     
     if not users:
         return markup
     
-    for user_id, first_name in users:
+    for user_id, first_name, username in users:
+        # Проверяем наличие отчета за последние 12 часов
+        has_report = database.has_recent_report(user_id)
+        status_icon = "✅" if has_report else "❌"
+        
+        display_name = username or first_name or f"User {user_id}"
+        
         markup.add(
             types.InlineKeyboardButton(
-                text=first_name or f"Пользователь {user_id}",
+                text=f"{display_name} {status_icon}",
                 callback_data=f"user_{user_id}"
             )
         )
     
     return markup
-
+    
 def generate_user_dates_inline(user_id):
     """Генерирует инлайн-кнопки с датами отчетов пользователя"""
     markup = types.InlineKeyboardMarkup()

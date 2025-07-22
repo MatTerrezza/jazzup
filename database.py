@@ -106,12 +106,13 @@ def get_user_tasks_by_date(user_id, date):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT task_text, is_completed 
+            SELECT id, user_id, task_text, is_completed, task_date 
             FROM tasks 
             WHERE user_id = ? AND date(task_date) = date(?)
+            ORDER BY task_date
         ''', (user_id, date))
         return cursor.fetchall()
-
+        
 def get_report_by_id_and_date(user_id, report_date):
     """Получает отчет по ID пользователя и дате"""
     with get_db_connection() as conn:
@@ -256,13 +257,13 @@ def get_users_with_reports():
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT DISTINCT u.user_id, u.first_name 
+            SELECT DISTINCT u.user_id, u.first_name, u.username 
             FROM users u
             JOIN reports r ON u.user_id = r.user_id
             ORDER BY u.first_name
         ''')
         return cursor.fetchall()
-
+        
 def update_report(report_id, new_text, editor_id):
     """Обновляет текст отчета и автоматически сохраняет старую версию"""
     with get_db_connection() as conn:
@@ -364,6 +365,17 @@ def toggle_task_status(task_id):
         ''', (task_id,))
         conn.commit()
         return cursor.rowcount > 0
+
+def has_recent_report(user_id, hours=12):
+    """Проверяет, есть ли у пользователя отчет за последние N часов"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COUNT(*) FROM reports 
+            WHERE user_id = ? 
+            AND datetime(report_date) >= datetime('now', ?)
+        ''', (user_id, f'-{hours} hours'))
+        return cursor.fetchone()[0] > 0
 
 # Инициализация базы данных
 init_db()
