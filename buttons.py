@@ -14,10 +14,10 @@ def get_user_keyboard(user_id=None):     #Возвращает клавиату�
 def get_main_keyboard():
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     
-    btn_report = types.KeyboardButton("Заполнить отчет")
-    btn_my_reports = types.KeyboardButton("Мои отчеты")
-    btn_tasks = types.KeyboardButton("Добавить задачу")
-    btn_my_tasks = types.KeyboardButton("Мои задачи")  # Новая кнопка
+    btn_report = types.KeyboardButton("Начать Факт-отчет")
+    btn_my_reports = types.KeyboardButton("Мои Факт-отчеты")
+    btn_tasks = types.KeyboardButton("Начать План-отчет")
+    btn_my_tasks = types.KeyboardButton("Мои План-отчеты")  # Новая кнопка
     btn_rule = types.KeyboardButton("Правила")
     
     keyboard.add(btn_report, btn_my_reports)
@@ -30,9 +30,10 @@ def get_admin_keyboard():   # Клавиатура для администрат
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     
     btn_view_reports = types.KeyboardButton("Просмотреть отчеты")
-
-    keyboard.add(btn_view_reports)
+    btn_rule_admin = types.KeyboardButton("Правила и функционал")
     
+    keyboard.add(btn_view_reports)
+    keyboard.add(btn_rule_admin)    
     return keyboard
     
 def generate_my_reports_inline(user_id):
