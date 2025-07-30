@@ -3,7 +3,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
 import database
 from datetime import datetime
-
+import bot
 
 def get_user_keyboard(user_id=None):     #Возвращает клавиатуру в зависимости от роли пользователя
 
@@ -84,8 +84,8 @@ def generate_my_report_actions_inline(report_id):
         )
     )
     
-    return markup    
-    
+    return markup
+
 def generate_users_inline():
     """Генерирует инлайн-кнопки с пользователями и статусом отчетов"""
     markup = types.InlineKeyboardMarkup()
@@ -144,13 +144,16 @@ def generate_user_dates_inline(user_id):
     
     return markup
 
-def generate_report_actions_inline(user_id, report_id, report_date):     #Генерирует кнопки действий с отчетом (редактирование/удаление)
-
+def generate_report_actions_inline(user_id, report_id, report_date):
+    """Генерирует кнопки действий с отчетом"""
     markup = types.InlineKeyboardMarkup()
     
-    markup.add(
+    # Получаем информацию о том, кто сейчас работает с отчетом (не автора отчета!)
+    current_user_is_admin = user_id in bot.ADMIN_IDS if hasattr(bot, 'ADMIN_IDS') else False
+    
+    markup.row(
         types.InlineKeyboardButton(
-            text="✏️ Редактировать",
+            text="✏️ Дать комментарий",
             callback_data=f"edit_{report_id}"
         ),
         types.InlineKeyboardButton(
@@ -159,7 +162,7 @@ def generate_report_actions_inline(user_id, report_id, report_date):     #Ген
         )
     )
     
-    markup.add(
+    markup.row(
         types.InlineKeyboardButton(
             text="◀️ Назад к отчетам",
             callback_data=f"user_{user_id}"
@@ -167,7 +170,6 @@ def generate_report_actions_inline(user_id, report_id, report_date):     #Ген
     )
     
     return markup
-
 
 def process_edit_report(message, report_id):
     try:

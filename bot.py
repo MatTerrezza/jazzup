@@ -41,16 +41,7 @@ def start_command(message):
 Для просмотра Факт и План отчета — выберите сотрудника из списка. Система автоматически фиксирует все действия."""
         
         admin_functionality = """
-📬 <b>Доступный функционал:</b>
-
-1. Нажмите «Начать Факт-отчет» - для заполнения своего отчета
-2. Нажмите «Начать План-отчет» - для планирования задач
-3. Используйте «Просмотреть отчеты» - для проверки отчетов сотрудников
-4. «Редактировать» - чтобы добавить комментарий к отчету
-5. «Удалить» - для удаления отчета из системы
-
-📊 Все отчеты хранятся 7 дней
-"""
+📬 <b>📊 Все отчеты хранятся 7 дней</b>"""
         bot.send_message(
             message.chat.id,
             admin_greeting,
@@ -71,35 +62,16 @@ def start_command(message):
 
 Спасибо за внимательность к деталям!"""
 
-        user_rules = """
-🖍 <b>Правила заполнения ежедневного Факт-отчета</b>
-
-1. Нажмите «Начать отчет» для заполнения
-2. Укажите конкретные результаты работы
-3. Перечислите все сделки с названиями
-4. Отправляйте отчет до 19:00
-
-📬 <b>Доступные функции:</b>
-- Создание и редактирование отчетов
-- Просмотр своих предыдущих отчетов
-- Автоматическое сохранение данных
-"""
-
         bot.send_message(
             message.chat.id,
             user_greeting,
             reply_markup=buttons.get_main_keyboard()
         )
-        bot.send_message(
-            message.chat.id,
-            user_rules,
-            parse_mode='HTML'
-        )
 @bot.message_handler(func=lambda m: m.text == "Начать Факт-отчет")
 def ask_for_report(message):
     msg = bot.send_message(
         message.chat.id,
-        "📝 Введите ваш отчет:",
+        "📝Введите текст Факт-отчета с выполненными задачами на текущий день:",
         reply_markup=ForceReply()
     )
     bot.register_next_step_handler(msg, save_report)
@@ -109,7 +81,7 @@ def save_report(message):
         report_id = database.add_report(message.from_user.id, message.text)
         bot.send_message(
             message.chat.id,
-            "✅ Отчет успешно сохранен!",
+            "✅Ваш отчет сохранен!",
             reply_markup=buttons.get_admin_keyboard() if is_admin(message.from_user.id) else buttons.get_main_keyboard()
         )
         
@@ -163,7 +135,7 @@ def process_edit_report(message, report_id):
         if success:
             bot.send_message(
                 message.chat.id,
-                "✅ Отчет успешно обновлен! Старая версия сохранена в архиве.",
+                "✅ Факт-отчет успешно обновлен! Старая версия сохранена в архиве.",
                 reply_markup=keyboard
             )
         else:
@@ -173,7 +145,7 @@ def process_edit_report(message, report_id):
                 reply_markup=keyboard
             )
     except Exception as e:
-        print(f"Ошибка при редактировании отчета: {e}")
+        print(f"Ошибка при редактировании факт-отчета: {e}")
         keyboard = buttons.get_admin_keyboard() if is_admin(message.from_user.id) else buttons.get_main_keyboard()
         bot.send_message(
             message.chat.id,
@@ -201,7 +173,7 @@ def handle_edit_report(call):
         # Отправляем сообщение с ForceReply
         msg = bot.send_message(
             call.message.chat.id,
-            "✏️ Редактируйте отчет (старый текст ниже):",
+            "✏️ Редактируйте факт-отчет (старый текст ниже):",
             reply_markup=ForceReply(selective=True)
         )
         
@@ -235,6 +207,15 @@ def reminder_scheduler():                                           #Функц�
 
 def send_daily_reminder():
     print(f"[{datetime.now()}] Запуск send_daily_reminder")
+    
+    # Получаем текущий день недели (0 - понедельник, 6 - воскресенье)
+    current_weekday = datetime.now().weekday()
+    
+    # Если суббота (5) или воскресенье (6), пропускаем отправку уведомлений
+    if current_weekday >= 5:  # 5 и 6 - это суббота и воскресенье
+        print("Сегодня выходной, уведомления не отправляются")
+        return
+    
     try:
         users = database.get_all_users()
         print(f"Найдено пользователей для напоминания: {len(users)}")
@@ -244,7 +225,7 @@ def send_daily_reminder():
                 print(f"Отправка напоминания пользователю {user_id} ({first_name})")
                 bot.send_message(
                     user_id,
-                    f"Kindly Reminder: сегодня до 19:00 по МСК необходимо сдать отчет❤️\n"
+                    f"Kind Reminder: сегодня до 19:00 по МСК необходимо сдать отчет❤️\n"
                     "Нажмите кнопку «Начать Факт-отчет», чтобы сдать рабочий отчет за сегодня.\n"
                     "Нажмите кнопку «Начать План-отчет», чтобы запланировать задачи на предстоящий рабочий день."
                 )
@@ -308,7 +289,7 @@ def start_rules_admin(message):
         reply_markup=buttons.get_admin_keyboard() if is_admin(message.from_user.id) else buttons.get_main_keyboard()
     )
 
-@bot.message_handler(func=lambda m: m.text == "Мои Факт-отчеты" and is_admin(m.from_user.id))
+@bot.message_handler(func=lambda m: m.text == "Просмотреть отчеты" and is_admin(m.from_user.id))
 def admin_view_reports(message):
     users = database.get_users_with_reports()
     if not users:
@@ -359,14 +340,14 @@ def handle_inline_buttons(call):
                 bot.edit_message_text(
                     chat_id=call.message.chat.id,
                     message_id=call.message.message_id,
-                    text="📭 У вас пока нет сохраненных отчетов."
+                    text="📭 У вас пока нет сохраненных факт-отчетов."
                 )
                 return
                 
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
-                text="📋 Выберите отчет для управления:",
+                text="📋 Выберите факт-отчет для управления:",
                 reply_markup=buttons.generate_my_reports_inline(call.from_user.id)
             )
         
@@ -386,7 +367,7 @@ def handle_inline_buttons(call):
             
             msg = bot.send_message(
                 call.message.chat.id,
-                "✏️ Введите новый текст отчета:",
+                "✏️ Введите новый текст факт-отчета:",
                 reply_markup=ForceReply(selective=True)
             )
             
@@ -623,19 +604,19 @@ def process_edit_task(message, task_id):
             reply_markup=buttons.get_main_keyboard()
         )
 #------------------------------------
-@bot.callback_query_handler(func=lambda call: call.data.startswith("report_"))   # 19.07 21:22 добавлено обьеденение отчета с задачей за вчерашний день
+@bot.callback_query_handler(func=lambda call: call.data.startswith("report_"))
 def handle_report_callback(call):
     try:
         # Разбираем callback_data: report_<user_id>_<date>
         _, user_id, report_date = call.data.split("_", 2)
         user_id = int(user_id)
-        
+
         # Получаем отчет
         report = database.get_report_by_date(user_id, report_date)
         if not report:
             bot.answer_callback_query(call.id, "Отчет не найден")
             return
-        
+
         # Получаем дату отчета и предыдущий день
         try:
             report_datetime = datetime.strptime(report_date, "%Y-%m-%d %H:%M:%S")
@@ -644,46 +625,55 @@ def handle_report_callback(call):
         except Exception as e:
             print(f"Ошибка обработки даты: {e}")
             previous_day_str = None
-        
+
         # Получаем задачи на предыдущий день
         previous_day_tasks = []
         if previous_day_str:
             previous_day_tasks = database.get_user_tasks_by_date(user_id, previous_day_str)
-        
-        # Формируем сообщение
+
+        # Получаем имя пользователя
         user = database.get_user(user_id)
         user_name = user[1] if user else f"Пользователь {user_id}"
-        
+
         try:
             formatted_date = datetime.strptime(report_date, "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y")
         except:
             formatted_date = report_date
-        
+
+        # Формируем сообщение
         msg = f"<b>Отчет {user_name}</b>\n"
         msg += f"<i>Дата: {formatted_date}</i>\n\n"
-        msg += f"{report['text']}\n\n"
-        
-        # Добавляем задачи предыдущего дня, если они есть
+        msg += f"{report['text']}\n"
+
+        # Добавляем задачи предыдущего дня, если есть
         if previous_day_tasks:
-            msg += "📌 <b>Задачи за предыдущий день:</b>\n"
+            msg += f"\n📌 <b>Задачи за {previous_day.strftime('%d.%m.%Y')}:</b>\n"
             for task in previous_day_tasks:
-                status = "✅" if task[3] else "⏳"  # task[3] - is_completed
-                msg += f"{status} {task[1]}\n"  # task[1] - task_text
-        
+                _, _, task_text, is_completed, task_date = task
+                status = "✅" if is_completed else "⏳"
+                msg += f"{status} {task_text}\n"
+
+        # Добавляем последнюю задачу
+        last_task = database.get_last_user_task(user_id)
+        if last_task:
+            task_text, task_date, is_completed = last_task
+            task_date_str = task_date.strftime("%d.%m.%Y") if hasattr(task_date, 'strftime') else str(task_date)
+            status = "✅" if is_completed else "⏳"
+            msg += f"\n🗓 <b>Последний План-отчет:</b>\n{status} {task_text}\n📅 {task_date_str}\n"
+
         # Обновляем сообщение
         bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
             text=msg,
             parse_mode="HTML",
-            reply_markup=buttons.generate_report_actions_inline(
-                user_id, report['id'], report_date
-            )
+            reply_markup=buttons.generate_report_actions_inline(user_id, report['id'], report_date)
         )
-        
+
     except Exception as e:
         print(f"Ошибка в handle_report_callback: {e}")
         bot.answer_callback_query(call.id, "Ошибка загрузки отчета")
+
 #--------------------------------------------
 @bot.message_handler(func=lambda m: m.text == "Мои План-отчеты")
 def show_my_tasks(message):
@@ -706,7 +696,7 @@ def show_my_tasks(message):
 def handle_add_task(message):
     msg = bot.send_message(
         message.chat.id,
-        "📝 Введите текст новой задачи:",
+        "📝Введите текст План-отчета с задачами на следующий рабочий день:",
         reply_markup=ForceReply()
     )
     bot.register_next_step_handler(msg, process_add_task)
@@ -716,7 +706,7 @@ def process_add_task(message):
         task_id = database.add_task(message.from_user.id, message.text)
         bot.send_message(
             message.chat.id,
-            "✅ Задача успешно добавлена!",
+            "✅Задачи успешно добавлены!",
             reply_markup=buttons.get_main_keyboard()
         )
     except Exception as e:

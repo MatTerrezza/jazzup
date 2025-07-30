@@ -108,7 +108,7 @@ def get_user_tasks_by_date(user_id, date):
         cursor.execute('''
             SELECT id, user_id, task_text, is_completed, task_date 
             FROM tasks 
-            WHERE user_id = ? AND date(task_date) = date(?)
+            WHERE user_id = ? AND strftime('%Y-%m-%d', task_date) = ?
             ORDER BY task_date
         ''', (user_id, date))
         return cursor.fetchall()
@@ -144,6 +144,19 @@ def get_report_by_date(user_id, report_date):
                 'edited_at': row[2]
             }
         return None
+
+def get_last_user_task(user_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT task_text, task_date, is_completed 
+            FROM tasks 
+            WHERE user_id = ? 
+            ORDER BY task_date DESC 
+            LIMIT 1
+        ''', (user_id,))
+        return cursor.fetchone()
+
 
 #-------------------------------------------------------
 def migrate_db():
@@ -329,11 +342,17 @@ def can_edit_report(user_id, report_id):
     """Проверяет, может ли пользователь редактировать отчет"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        
+        # Проверяем, является ли пользователь админом (используем импортированный bot)
+        if user_id in bot.ADMIN_IDS:
+            return True
+            
+        # Если не админ, проверяем, является ли пользователь автором отчета
         cursor.execute('SELECT user_id FROM reports WHERE id = ?', (report_id,))
         report = cursor.fetchone()
         if not report:
             return False
-        return user_id == report[0] 
+        return user_id == report[0]
 
 def delete_report(report_id):
     """Удаляет отчет по ID"""
